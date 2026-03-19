@@ -2,35 +2,48 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.pool import StaticPool
+from unittest.mock import patch, AsyncMock
 
+# 1. Patch de AWS verification que se corre en el lifespan ANTES de importar app
+patcher_aws = patch("app.services.aws.verify_aws_connectivity", new_callable=AsyncMock)
+patcher_aws.start()
+
+# Importaciones de la app tras preparar parches críticos
 from app.main import app
-from app.core.db import get_db
+from app.core import db
 from app.models.user import User
 from app.models.job import Job
-from app.core.db import Base # Usamos la base centralizada o re-declaramos si importa
+from app.core.db import Base 
 
-# Usamos SQLite en memoria para que cada ejecución de test sea limpia y rápida
-SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+# 2. Configurar SQLite en Memoria asegurando un StaticPool para compartir entre threads y dependencias
+# Usamos un URI de caché compartida para asegurar que todas las conexiones de aiosqlite vean las tablas
+SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///file:testdb?mode=memory&cache=shared&uri=true"
 
 engine = create_async_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    SQLALCHEMY_DATABASE_URL, 
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool
 )
 TestingSessionLocal = async_sessionmaker(
     bind=engine, class_=AsyncSession, expire_on_commit=False, autoflush=False
 )
 
+# 3. Forzar que toda la app use nuestra DB de pruebas para evitar fallos de aislamiento
+db.engine = engine
+db.AsyncSessionLocal = TestingSessionLocal
+
 async def override_get_db():
     async with TestingSessionLocal() as session:
         yield session
 
-# Sobrescribimos la dependencia de base de datos de la API
-app.dependency_overrides[get_db] = override_get_db
+app.dependency_overrides[db.get_db] = override_get_db
 
-@pytest_asyncio.fixture(scope="function", autouse=True)
+@pytest_asyncio.fixture(scope="session", autouse=True)
 async def setup_database():
-    """Configura la estructura de BD SQLite antes de cada test para limpieza."""
+    """Crea y destruye la DB para aislando los tests en memoria"""
     async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield
     async with engine.begin() as conn:
@@ -38,7 +51,6 @@ async def setup_database():
 
 @pytest_asyncio.fixture(scope="function")
 async def async_client():
-    """Provee un cliente HTTP asíncrono pegado directo al servidor de FastAPI."""
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:

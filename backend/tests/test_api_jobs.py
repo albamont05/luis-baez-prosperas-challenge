@@ -22,7 +22,7 @@ async def test_create_job(async_client: AsyncClient, mock_sqs):
         json={"report_type": "PDF"},
         headers=headers
     )
-    assert response.status_code == 202
+    assert response.status_code == 201
     data = response.json()
     assert data["report_type"] == "PDF"
     assert data["status"] == "PENDING"

@@ -11,7 +11,7 @@ from app.services.job import create_job, queue_job_generation, get_job_by_id, ge
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
-@router.post("", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 async def request_job(request: JobCreate, session: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Solicita la generación de un nuevo trabajo.
