@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.core.db import init_db
 from app.api.routers import jobs, auth
+from app.services.aws import verify_aws_connectivity
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -11,6 +12,11 @@ async def lifespan(app: FastAPI):
     print("Inicializando base de datos...")
     await init_db()
     print("Base de datos lista.")
+    
+    print("Verificando conectividad con Infraestructura Cloud/AWS (Fail-Fast)...")
+    await verify_aws_connectivity()
+    print("AWS / LocalStack verificado exitosamente.")
+    
     yield
     print("Shutting down...")
 

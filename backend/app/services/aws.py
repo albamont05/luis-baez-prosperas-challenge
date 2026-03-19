@@ -65,3 +65,24 @@ async def upload_file_to_s3(file_content: bytes, file_name: str, content_type: s
         
         logger.info(f"Archivo subido a S3: {s3_url}")
         return s3_url
+
+async def verify_aws_connectivity():
+    """
+    Verifica la conectividad con SQS y S3, levantando excepción
+    si los servicios AWS/LocalStack no están disponibles. (Fail-Fast)
+    """
+    kwargs = get_aws_client_kwargs()
+    try:
+        # Verificar conexión con SQS interactuando con la cola
+        async with session.client('sqs', **kwargs) as sqs:
+            await sqs.get_queue_url(QueueName=settings.sqs_queue_name)
+            logger.info("Colas SQS conectadas exitosamente.")
+            
+        # Verificar conexión con S3
+        async with session.client('s3', **kwargs) as s3:
+            await s3.head_bucket(Bucket=settings.s3_bucket_name)
+            logger.info("Bucket S3 conectado exitosamente.")
+            
+    except Exception as e:
+        logger.error(f"Falla crítica: No se pudo conectar a los servicios de AWS: {e}")
+        raise RuntimeError(f"AWS Connectivity Check Failed: {e}")
