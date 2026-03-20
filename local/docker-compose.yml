@@ -52,11 +52,12 @@ services:
 
   # Background Worker
   worker:
-    container_name: fastapi_reports_worker
     build:
       context: ../backend
       dockerfile: Dockerfile
     command: [ "python", "-m", "app.worker.main" ]
+    deploy:
+      replicas: 2
     env_file:
       - ../.env
     depends_on:

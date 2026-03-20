@@ -1,6 +1,7 @@
 import json
 import logging
 import aioboto3
+from botocore.exceptions import ClientError
 from app.core.config import settings
 from app.core.circuit_breaker import aws_circuit_breaker
 
@@ -68,21 +69,50 @@ async def upload_file_to_s3(file_content: bytes, file_name: str, content_type: s
 
 async def verify_aws_connectivity():
     """
-    Verifica la conectividad con SQS y S3, levantando excepción
-    si los servicios AWS/LocalStack no están disponibles. (Fail-Fast)
+    Verifica la conexión con AWS/LocalStack y asegura que los recursos existan.
+    Si el bucket o la cola no existen, intenta crearlos (Resiliencia).
     """
-    kwargs = get_aws_client_kwargs()
+    session = aioboto3.Session(
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+        region_name=settings.aws_region
+    )
+    
+    kwargs = {"endpoint_url": settings.aws_endpoint_url} if settings.aws_endpoint_url else {}
+
     try:
-        # Verificar conexión con SQS interactuando con la cola
-        async with session.client('sqs', **kwargs) as sqs:
-            await sqs.get_queue_url(QueueName=settings.sqs_queue_name)
-            logger.info("Colas SQS conectadas exitosamente.")
-            
-        # Verificar conexión con S3
-        async with session.client('s3', **kwargs) as s3:
-            await s3.head_bucket(Bucket=settings.s3_bucket_name)
-            logger.info("Bucket S3 conectado exitosamente.")
-            
+        # 1. Verificar/Crear S3 Bucket
+        async with session.client("s3", **kwargs) as s3:
+            try:
+                await s3.head_bucket(Bucket=settings.s3_bucket_name)
+                logger.info(f"✅ Bucket S3 verificado: {settings.s3_bucket_name}")
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code")
+                if error_code == "404":
+                    logger.info(f"⚠️ Bucket {settings.s3_bucket_name} no encontrado. Creando...")
+                    await s3.create_bucket(Bucket=settings.s3_bucket_name)
+                    logger.info(f"✅ Bucket {settings.s3_bucket_name} creado exitosamente.")
+                else:
+                    raise e
+
+        # 2. Verificar/Crear SQS Queue
+        async with session.client("sqs", **kwargs) as sqs:
+            try:
+                await sqs.get_queue_url(QueueName=settings.sqs_queue_name)
+                logger.info(f"✅ Cola SQS verificada: {settings.sqs_queue_name}")
+            except ClientError as e:
+                error_code = e.response.get("Error", {}).get("Code")
+                # LocalStack a veces devuelve NonExistentQueue
+                if error_code in ["AWS.SimpleQueueService.NonExistentQueue", "404"]:
+                    logger.info(f"⚠️ Cola {settings.sqs_queue_name} no encontrada. Creando...")
+                    await sqs.create_queue(QueueName=settings.sqs_queue_name)
+                    logger.info(f"✅ Cola {settings.sqs_queue_name} creada exitosamente.")
+                else:
+                    raise e
+
+        logger.info("🚀 Infraestructura de mensajería y almacenamiento lista.")
+        
     except Exception as e:
-        logger.error(f"Falla crítica: No se pudo conectar a los servicios de AWS: {e}")
+        logger.error(f"❌ Falla crítica de infraestructura AWS: {str(e)}")
+        # Elevamos el error para que el Lifespan de FastAPI detenga el inicio (Fail-Fast)
         raise RuntimeError(f"AWS Connectivity Check Failed: {e}")
