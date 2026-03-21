@@ -27,7 +27,7 @@ services:
       - GATEWAY_LISTEN_PORT=4566
       - PERSISTENCE=1
       - PERSIST_ALL=1
-      - SNAPSHOT_SAVE_STRATEGY=ON_REQUEST # O ON_SHUTDOWN
+      - SNAPSHOT_SAVE_STRATEGY=ON_REQUEST
       - DOCKER_FLAGS=-v /var/run/docker.sock:/var/run/docker.sock
       - SAVE_STATE=1
       - DEBUG=1
@@ -38,9 +38,8 @@ services:
       - "localstack_data:/var/lib/localstack"
       - "localstack_state:/usr/lib/localstack"
     healthcheck:
-      # Usamos el endpoint oficial de salud de LocalStack
       test: [ "CMD", "curl", "-f", "http://localhost:4566/_localstack/health" ]
-      interval: 10s # Damos un poco más de margen
+      interval: 10s
       timeout: 5s
       retries: 5
 
@@ -54,7 +53,7 @@ services:
       - "8000:8000"
     env_file:
       - ../.env
-    restart: always # Recomendado para APIs en desarrollo
+    restart: always
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,13 +72,27 @@ services:
       - ../.env
     environment:
       - AWS_ENDPOINT_URL=http://localstack:4566
-    # --- CAMBIOS CRUCIALES AQUÍ ---
-    restart: on-failure # Si el worker falla porque la SQS aún no existe, Docker lo reinicia.
+    restart: on-failure
     depends_on:
-      postgres:
-        condition: service_healthy
+      api:
+        condition: service_started
       localstack:
         condition: service_healthy
+
+  # Frontend (React)
+  frontend:
+    container_name: react_frontend
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        # En desarrollo local, el navegador del usuario accede vía localhost:8000
+        - VITE_API_URL=http://localhost:8000
+    ports:
+      - "80:80"
+    restart: always
+    depends_on:
+      - api
 
 volumes:
   postgres_data:
