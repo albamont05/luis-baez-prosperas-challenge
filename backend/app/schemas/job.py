@@ -15,6 +15,8 @@ class JobResponse(BaseModel):
     report_type: JobType
     status: JobStatus
     result_url: Optional[str] = None
+    # Pre-signed URL generada dinámicamente — no persiste en la BD
+    download_url: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 

@@ -1,9 +1,11 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware  # <-- Nuevo import
 from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.db import init_db
 from app.api.routers import jobs, auth
+from app.api.routers import websocket as ws_router
 from app.services.aws import verify_aws_connectivity
 
 @asynccontextmanager
@@ -29,11 +31,27 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# --- Configuración de CORS ---
+origins = [
+    "http://localhost:5173",    # Frontend Vite/Next.js
+    "http://127.0.0.1:5173",  # Alternativa de IP
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# -----------------------------
+
 app.add_exception_handler(Exception, global_exception_handler)
 app.add_exception_handler(CircuitBreakerOpenException, circuit_breaker_exception_handler)
 
 app.include_router(auth.router)
 app.include_router(jobs.router)
+app.include_router(ws_router.router)
 
 @app.get("/health")
 async def health_check():

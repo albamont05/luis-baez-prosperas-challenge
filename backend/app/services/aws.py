@@ -67,6 +67,41 @@ async def upload_file_to_s3(file_content: bytes, file_name: str, content_type: s
         logger.info(f"Archivo subido a S3: {s3_url}")
         return s3_url
 
+async def get_presigned_url(bucket: str, key: str, expires_in: int = 3600) -> str:
+    """
+    Genera una Pre-signed URL de S3 válida para el navegador.
+
+    El endpoint_url se fuerza a http://localhost:4566 (en lugar del hostname
+    interno de Docker) para que el navegador del cliente pueda resolver la URL.
+    """
+    # Para pre-signed URLs siempre apuntamos a localhost, independiente de
+    # la variable de entorno aws_endpoint_url (que puede ser el host Docker).
+    presign_endpoint = "http://localhost:4566" if settings.aws_endpoint_url else None
+
+    presign_kwargs = {
+        "region_name": settings.aws_region,
+        "aws_access_key_id": settings.aws_access_key_id,
+        "aws_secret_access_key": settings.aws_secret_access_key,
+    }
+    if presign_endpoint:
+        presign_kwargs["endpoint_url"] = presign_endpoint
+
+    presign_session = aioboto3.Session(
+        region_name=settings.aws_region,
+        aws_access_key_id=settings.aws_access_key_id,
+        aws_secret_access_key=settings.aws_secret_access_key,
+    )
+
+    async with presign_session.client("s3", **({"endpoint_url": presign_endpoint} if presign_endpoint else {})) as s3:
+        url = await s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": key},
+            ExpiresIn=expires_in,
+        )
+
+    logger.info("Pre-signed URL generada para s3://%s/%s (expira en %ds)", bucket, key, expires_in)
+    return url
+
 async def verify_aws_connectivity():
     """
     Verifica la conexión con AWS/LocalStack y asegura que los recursos existan.
