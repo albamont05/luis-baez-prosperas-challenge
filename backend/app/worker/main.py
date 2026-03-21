@@ -47,11 +47,34 @@ async def process_job(job_id_str: str, report_type: str):
         # 2. Simulación de procesamiento (3 segundos)
         await asyncio.sleep(3) 
         
-        file_content = f"ID: {job_id}\nType: {report_type}\nStatus: Completed".encode("utf-8")
         file_name = f"{job_id}.{'csv' if report_type == 'CSV' else 'pdf'}"
-        content_type = "text/csv" if report_type == "CSV" else "application/pdf"
         
-        # 3. Subida a S3 (LocalStack)
+        if report_type == "CSV":
+            file_content = f"ID: {job_id}\nType: {report_type}\nStatus: Completed".encode("utf-8")
+            content_type = "text/csv"
+        else:
+            # Generación de PDF binario mínimo (Estructura legal PDF-1.1)
+            # Esto asegura que visores como los de Zorin OS/Ubuntu lo reconozcan.
+            pdf_lines = [
+                b"%PDF-1.1",
+                b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj",
+                b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj",
+                b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >> endobj",
+                b"4 0 obj << /Length 50 >> stream",
+                f"BT /Helvetica 24 Tf 100 700 Td (Report: {job_id}) Tj ET".encode("ascii"),
+                b"endstream endobj",
+                b"xref",
+                b"0 5",
+                b"0000000000 65535 f",
+                b"trailer << /Size 5 /Root 1 0 R >>",
+                b"startxref",
+                b"0",
+                b"%%EOF"
+            ]
+            file_content = b"\n".join(pdf_lines)
+            content_type = "application/pdf"
+        
+        # 3. Subida a S3 (LocalStack) con metadatos de Content-Type
         result_url = await upload_file_to_s3(file_content, file_name, content_type)
         
         # 4. Éxito: Marcar como COMPLETED
