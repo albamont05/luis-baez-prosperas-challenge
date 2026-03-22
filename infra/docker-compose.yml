@@ -9,6 +9,17 @@ services:
       - .env
     # El archivo .env debe existir en la carpeta ~/app de la EC2
 
+  worker:
+    image: 352602573667.dkr.ecr.us-east-2.amazonaws.com/prosperas-backend:latest
+    container_name: prosperas-worker
+    restart: always
+    # Este comando arranca el proceso que procesa la cola SQS y genera los reportes
+    command: python -m app.workers.report_worker
+    env_file:
+      - .env
+    depends_on:
+      - backend
+
   frontend:
     image: 352602573667.dkr.ecr.us-east-2.amazonaws.com/prosperas-frontend:latest
     container_name: prosperas-frontend

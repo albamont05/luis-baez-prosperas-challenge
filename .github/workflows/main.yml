@@ -35,13 +35,15 @@ jobs:
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./backend
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      # --- FRONTEND ---
+      # --- FRONTEND (Ajustado para inyectar la IP de producción) ---
       - name: Build, Tag, and Push Frontend Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY_FRONTEND }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./frontend
+          docker build \
+            --build-arg VITE_API_BASE_URL=http://3.19.30.206:8000 \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./frontend
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
   deploy:
@@ -58,10 +60,9 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          # IMPORTANTE: Apuntamos a la carpeta infra
           source: "infra/docker-compose.yml"
           target: "~/app"
-          strip_components: 1 # Esto hace que solo copie el archivo, no la carpeta 'infra'
+          strip_components: 1 
 
       - name: Execute Remote SSH commands
         uses: appleboy/ssh-action@v1.0.3
@@ -71,11 +72,6 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ~/app
-            # Login en ECR usando el registry del job anterior
-            aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 352602573667.dkr.ecr.us-east-2.amazonaws.com
-            
-            # Forzar la descarga de las nuevas imágenes
+            aws ecr get-login-password --region ${{ vars.AWS_REGION }} | docker login --username AWS --password-stdin ${{ needs.build-and-push.outputs.registry }}
             docker-compose pull
-            
-            # Levantar los servicios en segundo plano
             docker-compose up -d

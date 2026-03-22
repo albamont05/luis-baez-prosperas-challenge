@@ -33,9 +33,10 @@ app = FastAPI(
 
 # --- Configuración de CORS ---
 origins = [
-    "http://localhost",      # Frontend en Docker (puerto 80)
-    "http://localhost:5173",    # Frontend Vite/React
-    "http://127.0.0.1",  # Alternativa de IP
+    "http://localhost",          # Local Docker
+    "http://localhost:5173",     # Local Vite
+    "http://3.19.30.206",        # IP pública de tu EC2 (Frontend)
+    "http://3.19.30.206:8000",   # Opcional para Swagger/Docs
 ]
 
 app.add_middleware(
