@@ -1,0 +1,19 @@
+services:
+  backend:
+    image: 352602573667.dkr.ecr.us-east-2.amazonaws.com/prosperas-backend:latest
+    container_name: prosperas-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    # El archivo .env debe existir en la carpeta ~/app de la EC2
+
+  frontend:
+    image: 352602573667.dkr.ecr.us-east-2.amazonaws.com/prosperas-frontend:latest
+    container_name: prosperas-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
