@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     CheckCircle2,
     XCircle,
@@ -48,6 +48,54 @@ const StatusBadge: React.FC<BadgeProps> = ({ status }) => {
     );
 };
 
+// ── Download Button (Con lógica dinámica y delay) ─────────────────────────
+
+const DownloadButton: React.FC<{ job: Job }> = ({ job }) => {
+    const [isReady, setIsReady] = useState(false);
+
+    useEffect(() => {
+        if (job.status === 'COMPLETED') {
+            // Delay de seguridad para mitigar la consistencia eventual de S3
+            const timer = setTimeout(() => setIsReady(true), 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [job.status]);
+
+    const extension = job.report_type === 'CSV' ? 'csv' : 'pdf';
+
+    // Obtener la base de la URL desde las variables de entorno (.env)
+    const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+    // Cambiamos dinámicamente el puerto 8000 por el 4566 para acceder al bucket
+    const s3Host = apiBase.replace(':8000', ':4566');
+
+    const fallbackUrl = `${s3Host}/prosperas-reports-bucket/${job.job_id}.${extension}`;
+    const downloadUrl = job.download_url || fallbackUrl;
+
+    if (!isReady) {
+        return (
+            <span className="text-slate-500 text-xs italic animate-pulse flex items-center justify-end gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Sincronizando...
+            </span>
+        );
+    }
+
+    return (
+        <button
+            onClick={() => window.open(downloadUrl, '_blank', 'noreferrer')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg
+                       bg-emerald-900/30 border border-emerald-500/30
+                       text-emerald-400 hover:text-emerald-300
+                       hover:bg-emerald-900/50 active:scale-95
+                       text-xs font-semibold transition-all duration-150"
+        >
+            <Download className="w-3.5 h-3.5" />
+            Descargar
+        </button>
+    );
+};
+
 // ── Main component ─────────────────────────────────────────────────────────
 
 interface JobTableProps {
@@ -69,7 +117,7 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onCreateJob, creatin
     return (
         <div className="flex flex-col gap-6">
 
-            {/* ── Toolbar ───────────────────────────────────────────────────── */}
+            {/* Toolbar */}
             <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div className="flex items-center gap-2 text-slate-400 text-sm">
                     <ClipboardList className="w-4 h-4" />
@@ -103,7 +151,7 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onCreateJob, creatin
                 </div>
             </div>
 
-            {/* ── Table ─────────────────────────────────────────────────────── */}
+            {/* Table */}
             <div className="overflow-x-auto rounded-2xl border border-slate-700/60 shadow-xl">
                 <table className="w-full text-sm text-left">
                     <thead className="bg-slate-800/80 text-slate-400 uppercase text-xs tracking-wider">
@@ -118,7 +166,6 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onCreateJob, creatin
 
                     <tbody className="divide-y divide-slate-700/50">
                         {loading && jobs.length === 0 ? (
-                            // Skeleton rows
                             Array.from({ length: 4 }).map((_, i) => (
                                 <tr key={i} className="bg-slate-900/40">
                                     {Array.from({ length: 5 }).map((_, j) => (
@@ -129,7 +176,6 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onCreateJob, creatin
                                 </tr>
                             ))
                         ) : jobs.length === 0 ? (
-                            // Empty state
                             <tr>
                                 <td colSpan={5}>
                                     <div className="flex flex-col items-center justify-center gap-3 py-16 text-slate-500">
@@ -145,7 +191,6 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onCreateJob, creatin
                                     key={job.job_id}
                                     className="bg-slate-900/30 hover:bg-slate-800/50 transition-colors duration-150"
                                 >
-                                    {/* Job ID — truncated */}
                                     <td className="px-5 py-4">
                                         <span
                                             className="font-mono text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded"
@@ -155,7 +200,6 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onCreateJob, creatin
                                         </span>
                                     </td>
 
-                                    {/* Report type */}
                                     <td className="px-5 py-4">
                                         <span className="inline-flex items-center gap-1.5 text-slate-300 font-medium">
                                             <FileText className="w-3.5 h-3.5 text-violet-400" />
@@ -163,37 +207,18 @@ const JobTable: React.FC<JobTableProps> = ({ jobs, loading, onCreateJob, creatin
                                         </span>
                                     </td>
 
-                                    {/* Status */}
                                     <td className="px-5 py-4">
                                         <StatusBadge status={job.status} />
                                     </td>
 
-                                    {/* Created at */}
                                     <td className="px-5 py-4 text-slate-500 hidden md:table-cell">
                                         {formatDate(job.created_at)}
                                     </td>
 
-                                    {/* Descarga — pre-signed URL */}
                                     <td className="px-5 py-4 text-right">
-                                        {job.status === 'COMPLETED' ? (() => {
-                                            const extension = job.report_type === 'CSV' ? 'csv' : 'pdf';
-                                            const fallbackUrl = `http://localhost:4566/prosperas-reports-bucket/${job.job_id}.${extension}`;
-                                            const downloadUrl = job.download_url || fallbackUrl;
-
-                                            return (
-                                                <button
-                                                    onClick={() => window.open(downloadUrl, '_blank', 'noreferrer')}
-                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg
-                                                               bg-emerald-900/30 border border-emerald-500/30
-                                                               text-emerald-400 hover:text-emerald-300
-                                                               hover:bg-emerald-900/50 active:scale-95
-                                                               text-xs font-semibold transition-all duration-150"
-                                                >
-                                                    <Download className="w-3.5 h-3.5" />
-                                                    Descargar
-                                                </button>
-                                            );
-                                        })() : (
+                                        {job.status === 'COMPLETED' ? (
+                                            <DownloadButton job={job} />
+                                        ) : (
                                             <span className="text-slate-600 text-xs">—</span>
                                         )}
                                     </td>
