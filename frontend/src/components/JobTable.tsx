@@ -69,7 +69,7 @@ const DownloadButton: React.FC<{ job: Job }> = ({ job }) => {
     // Cambiamos dinámicamente el puerto 8000 por el 4566 para acceder al bucket
     const s3Host = apiBase.replace(':8000', ':4566');
 
-    const fallbackUrl = `${s3Host}/prosperas-reports-bucket/${job.job_id}.${extension}`;
+    const fallbackUrl = `${s3Host}/prosperas-media-storage-luis/${job.job_id}.${extension}`;
     const downloadUrl = job.download_url || fallbackUrl;
 
     if (!isReady) {
