@@ -79,39 +79,45 @@ async def websocket_endpoint(
     await manager.connect(user_id, websocket)
 
     # Snapshot de estados ya conocidos para detectar cambios
-    known_statuses: dict[str, str] = {}
+    known_states: dict[str, str] = {} # job_id -> "status|result_url"
 
     try:
         while True:
             # ── Consulta a la BD ───────────────────────────────────
             async with AsyncSessionLocal() as db:
-                result = await db.execute(
-                    select(Job).where(Job.user_id == user.id)
-                )
+                result = await db.execute(select(Job).where(Job.user_id == user.id))
                 jobs = result.scalars().all()
 
             for job in jobs:
                 job_id_str = str(job.job_id)
-                current_status = job.status
+                # Creamos una "firma" del estado actual
+                current_state_signature = f"{job.status}|{job.result_url}"
 
-                # Solo notificar si el estado cambió respecto al snapshot
-                if known_statuses.get(job_id_str) != current_status:
-                    known_statuses[job_id_str] = current_status
+            # Notificar si el estado O la URL cambiaron
+            if known_states.get(job_id_str) != current_state_signature:
+                known_states[job_id_str] = current_state_signature
 
-                    # Enriquecer con download_url antes de enviar
-                    job_resp = JobResponse.model_validate(job)
-                    enriched_job = await enrich_job_with_download_url(job_resp)
+                # Solo enviamos el mensaje si el status es terminal o hubo un cambio real
+                job_resp = JobResponse.model_validate(job)
+                enriched_job = await enrich_job_with_download_url(job_resp)
 
-                    payload = {
-                        "event": "job_update",
-                        "job_id": job_id_str,
-                        "report_type": job.report_type,
-                        "status": current_status,
-                        "result_url": job.result_url,
-                        "download_url": enriched_job.download_url,
-                    }
-                    await manager.send_personal_message(user_id, payload)
-                    logger.info(
+                payload = {
+                    "event": "job_update",
+                    "job_id": job_id_str,
+                    "report_type": job.report_type,
+                    "status": job.status,
+                    "result_url": job.result_url,
+                    "download_url": enriched_job.download_url,
+                }
+                
+                # Verificación de seguridad: No enviar si es COMPLETED pero aún no hay URL
+                if job.status == JobStatus.COMPLETED and not enriched_job.download_url:
+                    # Retrocedemos el snapshot para intentar en la siguiente vuelta (dentro de 3s)
+                    known_states[job_id_str] = f"{job.status}|NONE"
+                    continue
+
+                await manager.send_personal_message(user_id, payload)
+                logger.info(
                         "Notificación enviada: user_id=%s job_id=%s status=%s",
                         user_id, job_id_str, current_status,
                     )

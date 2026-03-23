@@ -76,18 +76,24 @@ function App() {
   const handleWsUpdate = useCallback((update: WSJobUpdate) => {
     setJobs((prev) => {
       const idx = prev.findIndex((j) => j.job_id === update.job_id);
+
       if (idx === -1) {
-        // Brand-new job: fetch full list to get all fields
+        // Si el job no está en la lista (ej: se creó en otra pestaña), recargamos
         fetchJobs().then(setJobs).catch(() => null);
         return prev;
       }
-      // Patch only the changed job
+
+      // ── PARCHE CRÍTICO PARA AWS ──
+      // Actualizamos TODO el objeto con la info que viene del socket
       const next = [...prev];
       next[idx] = {
         ...next[idx],
         status: update.status,
         result_url: update.result_url,
+        // Agregamos esta línea para que el botón de descarga tenga el link real
+        download_url: update.download_url,
       };
+
       return next;
     });
   }, []);

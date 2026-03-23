@@ -19,9 +19,10 @@ export interface Job {
 export interface WSJobUpdate {
     event: 'job_update';
     job_id: string;
-    report_type: JobType;
+    report_type: string;
     status: JobStatus;
-    result_url: string | null;
+    result_url: string | null;   // Cambiado de ? a | null
+    download_url: string | null; // Cambiado de ? a | null
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────

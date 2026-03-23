@@ -55,28 +55,37 @@ const DownloadButton: React.FC<{ job: Job }> = ({ job }) => {
 
     useEffect(() => {
         if (job.status === 'COMPLETED') {
-            // Delay de 3 segundos para asegurar consistencia en AWS S3
             const timer = setTimeout(() => setIsReady(true), 3000);
             return () => clearTimeout(timer);
         }
     }, [job.status]);
 
     const handleDownload = () => {
-        const extension = job.report_type === 'CSV' ? 'csv' : 'pdf';
+        // 1. PRIORIDAD: Si el backend ya envió una URL (S3 real o Pre-signed)
+        // El backend en AWS suele enviar la URL completa, el de local no.
+        if (job.download_url && job.download_url.startsWith('http')) {
+            window.open(job.download_url, '_blank', 'noreferrer');
+            return;
+        }
 
-        // 1. Obtener la base de la URL (ej: http://3.19.30.206:8000)
+        // 2. FALLBACK: Construcción para LocalStack (Solo si no hay download_url)
+        const extension = job.report_type === 'CSV' ? 'csv' : 'pdf';
         const apiBase = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
-        // 2. Construcción dinámica del Host de S3 (Puerto 4566)
-        const s3Host = apiBase.includes(':8000')
-            ? apiBase.replace(':8000', ':4566')
-            : `${apiBase.replace(/\/$/, '')}:4566`;
+        // Si estamos en AWS real, apiBase no tendrá el puerto 8000. 
+        // Solo intentamos el cambio de puerto si detectamos que estamos en un entorno de desarrollo/localstack
+        let s3Host = apiBase;
 
-        // 3. Priorizar URL del backend, si no, usar el fallback al bucket correcto
-        const downloadUrl = job.download_url || `${s3Host}/prosperas-media-storage-luis/${job.job_id}.${extension}`;
+        if (apiBase.includes(':8000')) {
+            s3Host = apiBase.replace(':8000', ':4566');
+        } else if (apiBase.includes('localhost') || apiBase.includes('127.0.0.1')) {
+            // Si es localhost pero no tiene puerto 8000, asumimos 4566 para s3
+            s3Host = `${apiBase.replace(/\/$/, '')}:4566`;
+        }
 
-        console.log("Iniciando descarga:", downloadUrl);
-        window.open(downloadUrl, '_blank', 'noreferrer');
+        const fallbackUrl = `${s3Host}/prosperas-media-storage-luis/${job.job_id}.${extension}`;
+
+        window.open(fallbackUrl, '_blank', 'noreferrer');
     };
 
     if (!isReady) {
