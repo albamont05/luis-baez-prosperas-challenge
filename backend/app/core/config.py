@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # SQS / S3 configurations
     sqs_queue_name: str = Field(alias="SQS_QUEUE_NAME")
     s3_bucket_name: str = Field(alias="S3_BUCKET_NAME")
+    
+    # Public IP for CORS
+    aws_public_ip: str = Field(alias="AWS_PUBLIC_IP")
 
     model_config = SettingsConfigDict(
         env_file=".env",

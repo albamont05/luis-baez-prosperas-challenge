@@ -42,7 +42,7 @@ jobs:
           ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY_FRONTEND }}
         run: |
           docker build \
-            --build-arg VITE_API_BASE_URL=http://3.19.30.206:8000 \
+            --build-arg VITE_API_BASE_URL=http://3.19.60.194:8000 \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./frontend
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 

@@ -33,10 +33,10 @@ app = FastAPI(
 
 # --- Configuración de CORS ---
 origins = [
-    "http://localhost",          # Local Docker
-    "http://localhost:5173",     # Local Vite
-    "http://3.19.30.206",        # IP pública de tu EC2 (Frontend)
-    "http://3.19.30.206:8000",   # Opcional para Swagger/Docs
+    "http://localhost",                  # Local Docker
+    "http://localhost:5173",             # Local Vite
+    f"http://{settings.aws_public_ip}",    # IP pública desde .env
+    f"http://{settings.aws_public_ip}:8000", # Opcional para Swagger/Docs
 ]
 
 app.add_middleware(
