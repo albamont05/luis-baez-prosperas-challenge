@@ -48,33 +48,40 @@ const StatusBadge: React.FC<BadgeProps> = ({ status }) => {
     );
 };
 
-// ── Download Button (Con lógica dinámica y delay) ─────────────────────────
+// ── Download Button (Lógica Robusta para AWS) ─────────────────────────────
 
 const DownloadButton: React.FC<{ job: Job }> = ({ job }) => {
     const [isReady, setIsReady] = useState(false);
 
     useEffect(() => {
         if (job.status === 'COMPLETED') {
-            // Delay de seguridad para mitigar la consistencia eventual de S3
-            const timer = setTimeout(() => setIsReady(true), 2000);
+            // Delay de 3 segundos para asegurar consistencia en AWS S3
+            const timer = setTimeout(() => setIsReady(true), 3000);
             return () => clearTimeout(timer);
         }
     }, [job.status]);
 
-    const extension = job.report_type === 'CSV' ? 'csv' : 'pdf';
+    const handleDownload = () => {
+        const extension = job.report_type === 'CSV' ? 'csv' : 'pdf';
 
-    // Obtener la base de la URL desde las variables de entorno (.env)
-    const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        // 1. Obtener la base de la URL (ej: http://3.19.30.206:8000)
+        const apiBase = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
-    // Cambiamos dinámicamente el puerto 8000 por el 4566 para acceder al bucket
-    const s3Host = apiBase.replace(':8000', ':4566');
+        // 2. Construcción dinámica del Host de S3 (Puerto 4566)
+        const s3Host = apiBase.includes(':8000')
+            ? apiBase.replace(':8000', ':4566')
+            : `${apiBase.replace(/\/$/, '')}:4566`;
 
-    const fallbackUrl = `${s3Host}/prosperas-media-storage-luis/${job.job_id}.${extension}`;
-    const downloadUrl = job.download_url || fallbackUrl;
+        // 3. Priorizar URL del backend, si no, usar el fallback al bucket correcto
+        const downloadUrl = job.download_url || `${s3Host}/prosperas-media-storage-luis/${job.job_id}.${extension}`;
+
+        console.log("Iniciando descarga:", downloadUrl);
+        window.open(downloadUrl, '_blank', 'noreferrer');
+    };
 
     if (!isReady) {
         return (
-            <span className="text-slate-500 text-xs italic animate-pulse flex items-center justify-end gap-1">
+            <span className="text-slate-500 text-xs italic animate-pulse flex items-center justify-end gap-1 px-3 py-1.5">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 Sincronizando...
             </span>
@@ -83,7 +90,7 @@ const DownloadButton: React.FC<{ job: Job }> = ({ job }) => {
 
     return (
         <button
-            onClick={() => window.open(downloadUrl, '_blank', 'noreferrer')}
+            onClick={handleDownload}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg
                        bg-emerald-900/30 border border-emerald-500/30
                        text-emerald-400 hover:text-emerald-300
