@@ -90,36 +90,36 @@ async def websocket_endpoint(
 
             for job in jobs:
                 job_id_str = str(job.job_id)
-                # Creamos una "firma" del estado actual
+                # 1. Definimos la firma (status + url)
                 current_state_signature = f"{job.status}|{job.result_url}"
 
-            # Notificar si el estado O la URL cambiaron
-            if known_states.get(job_id_str) != current_state_signature:
-                known_states[job_id_str] = current_state_signature
+                # 2. Comparamos contra el snapshot
+                if known_states.get(job_id_str) != current_state_signature:
+                    known_states[job_id_str] = current_state_signature
 
-                # Solo enviamos el mensaje si el status es terminal o hubo un cambio real
-                job_resp = JobResponse.model_validate(job)
-                enriched_job = await enrich_job_with_download_url(job_resp)
+                    job_resp = JobResponse.model_validate(job)
+                    enriched_job = await enrich_job_with_download_url(job_resp)
 
-                payload = {
-                    "event": "job_update",
-                    "job_id": job_id_str,
-                    "report_type": job.report_type,
-                    "status": job.status,
-                    "result_url": job.result_url,
-                    "download_url": enriched_job.download_url,
-                }
-                
-                # Verificación de seguridad: No enviar si es COMPLETED pero aún no hay URL
-                if job.status == JobStatus.COMPLETED and not enriched_job.download_url:
-                    # Retrocedemos el snapshot para intentar en la siguiente vuelta (dentro de 3s)
-                    known_states[job_id_str] = f"{job.status}|NONE"
-                    continue
+                    payload = {
+                        "event": "job_update",
+                        "job_id": job_id_str,
+                        "report_type": job.report_type,
+                        "status": job.status, # <-- Usamos job.status directamente
+                        "result_url": job.result_url,
+                        "download_url": enriched_job.download_url,
+                    }
+                    
+                    # Verificación de seguridad para COMPLETED sin URL aún
+                    if job.status == JobStatus.COMPLETED and not enriched_job.download_url:
+                        known_states[job_id_str] = f"{job.status}|NONE"
+                        continue
 
-                await manager.send_personal_message(user_id, payload)
-                logger.info(
+                    await manager.send_personal_message(user_id, payload)
+                    
+                    # 3. CORRECCIÓN DEL LOG (Aquí es donde fallaba)
+                    logger.info(
                         "Notificación enviada: user_id=%s job_id=%s status=%s",
-                        user_id, job_id_str, current_status,
+                        user_id, job_id_str, job.status, # <-- Cambiado 'current_status' por 'job.status'
                     )
 
             await asyncio.sleep(POLL_INTERVAL)
